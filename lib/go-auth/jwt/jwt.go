@@ -88,28 +88,29 @@ func Encode(identity identity.DockerIdentity, options EncodeOptions) (string, er
 
 	// non standard fields
 	// Note: this is a required field
-	token.Claims[username] = identity.Username
-	token.Claims[email] = identity.Email
+	token.Claims.(jwt.MapClaims)[username] = identity.Username
+	token.Claims.(jwt.MapClaims)[email] = identity.Email
 
 	// standard JWT fields, consult the JWT spec for details
-	token.Claims[sub] = identity.DockerID
+	token.Claims.(jwt.MapClaims)[sub] = identity.DockerID
 
 	if len(identity.Scopes) > 0 {
-		token.Claims[scope] = strings.Join(identity.Scopes, " ")
+		token.Claims.(jwt.MapClaims)[scope] = strings.Join(identity.Scopes, " ")
 	}
 
 	jtiStr := options.Jti
 	if len(jtiStr) == 0 {
-		jtiStr = "jti-" + uuid.NewV4().String()
+		uuidv4, _ := uuid.NewV4()
+		jtiStr = "jti-" + uuidv4.String()
 	}
-	token.Claims[jti] = jtiStr
+	token.Claims.(jwt.MapClaims)[jti] = jtiStr
 
-	token.Claims[iat] = time.Now().Unix()
-	token.Claims[exp] = options.Expiration
+	token.Claims.(jwt.MapClaims)[iat] = time.Now().Unix()
+	token.Claims.(jwt.MapClaims)[exp] = options.Expiration
 
 	if options.IncludeLegacyClaims {
-		token.Claims[sessionid] = jtiStr
-		token.Claims[userid] = identity.DockerID
+		token.Claims.(jwt.MapClaims)[sessionid] = jtiStr
+		token.Claims.(jwt.MapClaims)[userid] = identity.DockerID
 	}
 
 	return token.SignedString(options.SigningKey)
@@ -126,20 +127,20 @@ func Decode(tokenStr string, options DecodeOptions) (*identity.DockerIdentity, e
 	token, err := jwt.Parse(tokenStr, keyFunc(rootCerts))
 
 	if err == nil && token.Valid {
-		username, ok := token.Claims[username].(string)
+		username, ok := token.Claims.(jwt.MapClaims)[username].(string)
 		if !ok {
 			return nil, fmt.Errorf("%v claim not present", username)
 		}
-		dockerID, ok := token.Claims[sub].(string)
+		dockerID, ok := token.Claims.(jwt.MapClaims)[sub].(string)
 		if !ok {
 			return nil, fmt.Errorf("%v claim not present", sub)
 		}
 
 		// email is optional
-		email, _ := token.Claims[email].(string)
+		email, _ := token.Claims.(jwt.MapClaims)[email].(string)
 
 		var scopes []string
-		if scopeClaim, ok := token.Claims[scope]; ok {
+		if scopeClaim, ok := token.Claims.(jwt.MapClaims)[scope]; ok {
 			sstr, ok := scopeClaim.(string)
 			if !ok {
 				return nil, fmt.Errorf("scope claim invalid")
@@ -280,3 +281,4 @@ func (e *ValidationError) Error() string {
 
 	return fmt.Sprintf("token validation error: [%v]", e.VError)
 }
+
